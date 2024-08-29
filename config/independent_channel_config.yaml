@@ -1,0 +1,54 @@
+# data_settings
+data_root_dir: "dataset/synthetic2.npy"
+batch_size: 32
+
+# model_settings
+z_dim: 8
+a_dim: 8
+K: 8
+codec_type: "independent"
+reconst_weight: 0.01
+regularization_weight: 0.3
+kalman_weight: 1
+kl_weight: 0
+dpn_hidden_size: 128
+dpn_num_layers: 2
+learn_noise_covariance: false
+init_noise_scale: 1
+init_transition_reg_weight: 1
+init_observation_reg_weight: 0.1
+symmetrize_covariance: true
+
+# training_settings
+epochs: 500
+warmup_epochs: 10
+learning_rate: 0.001
+learning_rate_decay: 0.9
+burn_in: 3
+batch_operation: "mean"
+sequence_operation: "mean"
+scheduler_step: 20
+run_mode: "batch-wise"
+
+# evaluation_settings
+evaluation: true
+evaluation_interval_video: 100
+evaluation_interval_table: 10
+continuous_mask_video: [10,20]
+random_mask_video: [0.2,0.4]
+continuous_mask_table: true
+random_mask_table: true
+
+#plot_settings
+scalogram_channels: [0, 1]
+latent_channels: [0, 1]
+
+# environment_settings
+device: "cuda"
+precision: "single"
+amp: true
+checkpoint_dir: "checkpoints"
+checkpoint_interval: 10
+save_best: true
+use_wandb: true
+project_name: "TSKVAE"
