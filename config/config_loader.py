@@ -58,10 +58,16 @@ class Config:
     evaluation: bool
     evaluation_interval_video: int
     evaluation_interval_table: int
-    continuous_mask_video: Optional[List[int]]
-    random_mask_video: Optional[List[float]]
+    evaluation_interval_curve: int
+    evaluation_continuous_mask_video: Optional[List[int]]
+    evaluation_random_mask_video: Optional[List[float]]
+    evaluation_continuous_mask_curve: int
+    unmasked_video: bool
+    continuous_mask_video: bool
+    random_mask_video: bool
     continuous_mask_table: bool
     random_mask_table: bool
+    continuous_mask_curve: bool
 
     def to_dict(self):
         return self.__dict__

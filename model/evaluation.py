@@ -57,6 +57,17 @@ class EvaluationManager:
             device=self.config.device, dtype=self.config.precision
         )
         self.evaluate_sequence_length = self.evaluate_data.shape[0]
+        self.window_step = (
+            self.transform_handler.window - self.transform_handler.overlap
+        )
+        self.cut_length = 2
+
+    def window2indices(self, window):
+        return (
+            self.transform_handler.window
+            - self.cut_length * 2
+            + self.window_step * (window - 1)
+        )
 
     def get_images(self, data, mask=None):
         _, info = self.model.elbo(
@@ -158,13 +169,13 @@ class EvaluationManager:
                     info["weights"][step, idx].cpu().detach().numpy(),
                 )
                 axes[channel_length, 1].set_ylim(0, 1)
-                original_curve = self.transform_handler.inverse_transform(
+                original_curve = self.transform_handler.wavelet.inverse_transform(
                     image[idx][0], image[idx][1]
                 )
-                filtered_curve = self.transform_handler.inverse_transform(
+                filtered_curve = self.transform_handler.wavelet.inverse_transform(
                     filtered_images[step, idx, 0], filtered_images[step, idx, 1]
                 )
-                smoothed_curve = self.transform_handler.inverse_transform(
+                smoothed_curve = self.transform_handler.wavelet.inverse_transform(
                     smoothed_images[step, idx, 0], smoothed_images[step, idx, 1]
                 )
                 axes[channel_length, 2].plot(original_curve, label="Encoded")
@@ -204,6 +215,145 @@ class EvaluationManager:
             video_clip.write_videofile(filename, codec="libx264", logger=None)
             logger.info(f"Video saved at {filename}")
 
+    def make_curve(self, filename, mask=None):
+        info, filtered_images, smoothed_images = self.get_images(
+            self.evaluate_data[:, 0:1], mask
+        )
+
+        idx = 0
+        logger.info(f"Making curve {filename.split('/')[-1]}")
+        original_curves = []
+        filtered_curves = []
+        smoothed_curves = []
+        for step, (image) in enumerate(self.evaluate_data[:, 0:1]):
+            image = image.cpu().float().detach().numpy()
+            original_curve = self.transform_handler.wavelet.inverse_transform(
+                image[idx][0], image[idx][1]
+            )
+            filtered_curve = self.transform_handler.wavelet.inverse_transform(
+                filtered_images[step, idx, 0], filtered_images[step, idx, 1]
+            )
+            smoothed_curve = self.transform_handler.wavelet.inverse_transform(
+                smoothed_images[step, idx, 0], smoothed_images[step, idx, 1]
+            )
+            original_curves.append(original_curve)
+            filtered_curves.append(filtered_curve)
+            smoothed_curves.append(smoothed_curve)
+
+        mask_np = mask.cpu().detach().numpy()
+        mask_indices = np.where(mask_np == 0)[0]
+        eval_window_start = mask_indices[0]
+        eval_window_end = mask_indices[-1]
+        window_length = len(filtered_curves[0][self.cut_length : -self.cut_length])
+        eval_indices_start = self.window2indices(eval_window_start)
+        eval_indices_end = self.window2indices(eval_window_end)
+        eval_interval_start = (
+            self.window2indices(eval_window_start) + window_length - self.window_step
+        )
+        eval_interval_end = self.window2indices(eval_window_end) + self.window_step
+        # eval_window = int(mask.sum().cpu().detach().numpy())
+        state_length = len(original_curves)
+        curve = original_curves[0][self.cut_length : -self.cut_length]
+        for i in range(1, state_length):
+            curve_next = original_curves[i][self.cut_length : -self.cut_length]
+            curve = np.concatenate(
+                (
+                    curve,
+                    curve_next[-self.window_step :]
+                    + (curve[-1] - curve_next[-self.window_step - 1]),
+                )
+            )
+
+        filtered = []
+        for i in range(eval_window_start, eval_window_end + 1):
+            current_window = filtered_curves[i][self.cut_length : -self.cut_length]
+            current_indices_start = self.window2indices(i)
+            tail_diff = eval_interval_end - current_indices_start
+            head_diff = eval_interval_start - current_indices_start
+            obv_start = max(0, head_diff)
+            obv_end = min(window_length, tail_diff)
+            obv_value = current_window[obv_start:obv_end]
+            if obv_start == 0:
+                obv_pre_nan_padding = np.full(-head_diff, np.nan)
+                obv_value = np.concatenate((obv_pre_nan_padding, obv_value))
+            if obv_end == window_length:
+                obv_post_nan_padding = np.full(tail_diff - window_length, np.nan)
+                obv_value = np.concatenate((obv_value, obv_post_nan_padding))
+            filtered.append(obv_value)
+        filtered = np.array(filtered)
+        filtered_mean = np.nanmean(filtered, axis=0)
+        estimated_error = curve[eval_indices_start] - filtered_mean[0]
+        filtered_mean = filtered_mean + estimated_error
+        filtered_max = np.nanmax(filtered, axis=0)
+        filtered_max = filtered_max + estimated_error
+        filtered_min = np.nanmin(filtered, axis=0)
+        filtered_min = filtered_min + estimated_error
+
+        smoothed = []
+        for i in range(eval_window_start, eval_window_end + 1):
+            current_window = smoothed_curves[i][self.cut_length : -self.cut_length]
+            current_indices_start = self.window2indices(i)
+            tail_diff = eval_interval_end - current_indices_start
+            head_diff = eval_interval_start - current_indices_start
+            obv_start = max(0, head_diff)
+            obv_end = min(window_length, tail_diff)
+            obv_value = current_window[obv_start:obv_end]
+            if obv_start == 0:
+                obv_pre_nan_padding = np.full(-head_diff, np.nan)
+                obv_value = np.concatenate((obv_pre_nan_padding, obv_value))
+            if obv_end == window_length:
+                obv_post_nan_padding = np.full(tail_diff - window_length, np.nan)
+                obv_value = np.concatenate((obv_value, obv_post_nan_padding))
+            smoothed.append(obv_value)
+        smoothed = np.array(smoothed)
+        smoothed_mean = np.nanmean(smoothed, axis=0)
+        estimated_error = curve[eval_indices_start] - smoothed_mean[0]
+        smoothed_mean = smoothed_mean + estimated_error
+        smoothed_max = np.nanmax(smoothed, axis=0)
+        smoothed_max = smoothed_max + estimated_error
+        smoothed_min = np.nanmin(smoothed, axis=0)
+        smoothed_min = smoothed_min + estimated_error
+
+        x1 = np.arange(len(curve))
+        x2 = np.arange(
+            eval_indices_start,
+            eval_indices_start + self.config.evaluation_continuous_mask_curve,
+        )
+        fig, axes = plt.subplots(
+            figsize=(10, 10),
+            nrows=2,
+            ncols=1,
+        )
+        fig.suptitle("Curve Reconstruction")
+        axes[0].plot(x1, curve, label="Encoded")
+        axes[0].plot(x2, filtered_mean, label="Filtered")
+        axes[0].fill_between(
+            x2,
+            filtered_min,
+            filtered_max,
+            color="gray",
+            alpha=0.3,
+            label="Filtered Range",
+        )
+        axes[0].legend()
+        axes[0].set_xlabel("Index")
+        axes[0].set_ylabel("Value")
+
+        axes[1].plot(x1, curve, label="Encoded")
+        axes[1].plot(x2, smoothed_mean, label="Smoothed")
+        axes[1].fill_between(
+            x2,
+            smoothed_min,
+            smoothed_max,
+            color="gray",
+            alpha=0.3,
+            label="Smoothed Range",
+        )
+        axes[1].legend()
+        axes[1].set_xlabel("Index")
+        axes[1].set_ylabel("Value")
+        plt.savefig(filename)
+
     def calculate_incorrect_pixels(self, mask=None):
         info, filtered_images, smoothed_images = self.get_images(
             self.evaluate_data, mask
@@ -224,9 +374,12 @@ class EvaluationManager:
         )
         return filtering_incorrect_pixel, smoothing_incorrect_pixel
 
-    def create_continuous_mask(self, mask_length):
+    def create_continuous_mask(self, mask_length, end=False):
         lst = [1.0] * self.evaluate_sequence_length
-        start_index = (self.evaluate_sequence_length - mask_length) // 2
+        if end:
+            start_index = self.evaluate_sequence_length - mask_length
+        else:
+            start_index = (self.evaluate_sequence_length - mask_length) // 2
         for i in range(start_index, start_index + mask_length):
             lst[i] = 0.0
         return (
@@ -264,7 +417,7 @@ class EvaluationManager:
         wandb.log({"unmasked_video": video})
 
     def log_continuous_masked_video(self, video_path):
-        for mask_length in self.config.continuous_mask_video:
+        for mask_length in self.config.evaluation_continuous_mask_video:
             mask = self.create_continuous_mask(
                 mask_length=mask_length,
             )
@@ -302,6 +455,28 @@ class EvaluationManager:
                 format="mp4",
             )
             wandb.log({"random_masked_video": video})
+
+    def log_continuous_masked_curve(self, image_path):
+        file_name = "curve_reconstruction.png"
+        image_name = f"{image_path}/{file_name}"
+        logger.info(f"Making {file_name}")
+
+        mask_length = (
+            int(
+                (
+                    (self.transform_handler.window - 2 * 2)
+                    + self.config.evaluation_continuous_mask_curve
+                )
+                / (self.transform_handler.window - self.transform_handler.overlap)
+            )
+            - 1
+        )
+        mask = self.create_continuous_mask(mask_length=mask_length)
+        self.make_curve(
+            mask=mask,
+            filename=image_name,
+        )
+        wandb.log({"continuous_masking_estimate": wandb.Image(image_name)})
 
     def log_continuous_masking_table(self, csv_path):
         file_name = "continuous_masking.csv"
@@ -394,14 +569,15 @@ class EvaluationManager:
                 video_path_root = f"{self.config.checkpoint_dir}/videos/epoch_{epoch}"
                 os.makedirs(video_path_root, exist_ok=True)
                 self.model.eval()
-                self.log_unmasked_video(
-                    video_path=video_path_root,
-                )
-                if self.config.continuous_mask_video is not None:
+                if self.config.unmasked_video:
+                    self.log_unmasked_video(
+                        video_path=video_path_root,
+                    )
+                if self.config.continuous_mask_video:
                     self.log_continuous_masked_video(
                         video_path=video_path_root,
                     )
-                if self.config.random_mask_video is not None:
+                if self.config.random_mask_video:
                     self.log_random_masked_video(
                         video_path=video_path_root,
                     )
@@ -419,4 +595,14 @@ class EvaluationManager:
                 if self.config.random_mask_table:
                     self.log_random_masked_table(
                         csv_path=csv_path_root,
+                    )
+        if self.config.evaluation_interval_curve > 0:
+            if epoch % self.config.evaluation_interval_curve == 0:
+                logger.info("Evaluating curve...")
+                curve_path_root = f"{self.config.checkpoint_dir}/image/epoch_{epoch}"
+                os.makedirs(curve_path_root, exist_ok=True)
+                self.model.eval()
+                if self.config.continuous_mask_curve:
+                    self.log_continuous_masked_curve(
+                        image_path=curve_path_root,
                     )

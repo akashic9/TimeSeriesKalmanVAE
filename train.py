@@ -4,11 +4,11 @@ import numpy as np
 import torch
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
+import wandb
 from loguru import logger
 from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
 
-import wandb
 from config.config_loader import training_config_loader
 from dataset.dataset import (
     ComplexMorletWaveletTransform,
@@ -260,7 +260,7 @@ if __name__ == "__main__":
         dataloader=dataloader_test,
         model=kvae,
         sample_control=sample_control_dict["test"],
-        transform_handler=wavelet_transformer,
+        transform_handler=sequence_transformer,
         config=configs,
     )
 

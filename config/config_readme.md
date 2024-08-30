@@ -33,10 +33,16 @@
    - **`evaluation`:** Whether to evaluate the model during training.
    - **`evaluation_interval_video`:** The interval at which the model is visualized during training.
    - **`evaluation_interval_table`:** The interval at which the model is evaluated during training.
+   - **`evaluation_interval_curve`:** The interval at which the model is output curves during training.
+   - **`evaluation_continuous_mask_video`:** The interval to make videos using a continuous mask to evaluate the model.
+   - **`evaluation_random_mask_video`:** The interval to make tables using a random mask to evaluate the model.
+   - **`evaluation_continuous_mask_curve`:** The interval that want to estimate the curve.
+   - **`unmasked_video`:** Whether to make unmasked videos to evaluate the model.
    - **`continuous_mask_video`:** Whether to make videos using a continuous mask to evaluate the model.
-   - **`random_mask`:** Whether to make videos using a random mask to evaluate the model.
+   - **`random_mask_video`:** Whether to make videos using a random mask to evaluate the model.
    - **`continuous_mask_table`:** Whether to make tables using a continuous mask to evaluate the model.
    - **`random_mask_table`:** Whether to make tables using a random mask to evaluate the model.
+   - **`continuous_mask_curve`:** Whether to make curves using a continuous mask to evaluate the model.
 ### 5. **Plot Settings**
    - **`scalogram_channels`:**  Selects which channels to plot in the scalogram.
    - **`latent_channels`:** Selects which dimensions of the latent encoding **a** to plot.
