@@ -37,12 +37,12 @@ evaluation_interval_table: 10
 evaluation_interval_curve: 10
 evaluation_continuous_mask_video: [10,20]
 evaluation_random_mask_video: [0.2,0.4]
-evaluation_continuous_mask_curve: 60
-unmasked_video: false
-continuous_mask_video: false
-random_mask_video: false
-continuous_mask_table: false
-random_mask_table: false
+evaluation_continuous_mask_curve: 56
+unmasked_video: true
+continuous_mask_video: true
+random_mask_video: true
+continuous_mask_table: true
+random_mask_table: true
 continuous_mask_curve: true
 
 #plot_settings
@@ -56,5 +56,5 @@ amp: true
 checkpoint_dir: "checkpoints"
 checkpoint_interval: 10
 save_best: true
-use_wandb: false
+use_wandb:  true
 project_name: "TSKVAE"

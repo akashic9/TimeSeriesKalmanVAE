@@ -437,7 +437,7 @@ class EvaluationManager:
             wandb.log({"continuous_masked_video": video})
 
     def log_random_masked_video(self, video_path):
-        for mask_rate in self.config.random_mask_video:
+        for mask_rate in self.config.evaluation_random_mask_video:
             mask = self.create_random_mask(
                 mask_rate=mask_rate,
             )
